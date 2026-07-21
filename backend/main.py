@@ -1,0 +1,170 @@
+import os
+import numpy as np
+import torch
+import joblib
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel, Field
+
+from black_scholes import bs_price_and_greeks
+from data_collector import fetch_full_snapshot
+
+# ── App ────────────────────────────────────────────────────────────────────────
+app = FastAPI(title="NeuralPricer API", version="1.0.0")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# ── Load model + scalers ───────────────────────────────────────────────────────
+MODEL_DIR = os.getenv("MODEL_DIR", "../models")
+
+_model    = None
+_scaler_X = None
+_scaler_y = None
+
+
+def get_model():
+    global _model, _scaler_X, _scaler_y
+    if _model is None:
+        model_path = os.path.join(MODEL_DIR, "best_model_scripted.pt")
+        sx_path    = os.path.join(MODEL_DIR, "scaler_X.pkl")
+        sy_path    = os.path.join(MODEL_DIR, "scaler_y.pkl")
+
+        if not all(os.path.exists(p) for p in [model_path, sx_path, sy_path]):
+            return None, None, None
+
+        _model    = torch.jit.load(model_path, map_location="cpu")
+        _model.eval()
+        _scaler_X = joblib.load(sx_path)
+        _scaler_y = joblib.load(sy_path)
+    return _model, _scaler_X, _scaler_y
+
+
+FEATURE_COLS = ["S", "K", "T", "r", "sigma", "is_call",
+                "moneyness", "log_moneyness", "sqrt_T"]
+
+# ── Schemas ────────────────────────────────────────────────────────────────────
+class PriceRequest(BaseModel):
+    S:       float = Field(..., example=42000, description="Spot price")
+    K:       float = Field(..., example=43000, description="Strike price")
+    T:       float = Field(..., example=0.25,  description="Time to maturity (years)")
+    r:       float = Field(..., example=0.045, description="Risk-free rate")
+    sigma:   float = Field(..., example=0.72,  description="Implied volatility")
+    is_call: int   = Field(..., example=1,     description="1=call, 0=put")
+
+
+# ── Helpers ────────────────────────────────────────────────────────────────────
+def build_features(req: PriceRequest) -> np.ndarray:
+    mon = req.S / req.K
+    return np.array([[
+        req.S, req.K, req.T, req.r, req.sigma, req.is_call,
+        mon, float(np.log(mon)), float(np.sqrt(req.T))
+    ]])
+
+
+def nn_infer(features: np.ndarray, model, scaler_X, scaler_y) -> float:
+    X_s = scaler_X.transform(features)
+    t   = torch.tensor(X_s, dtype=torch.float32)
+    with torch.no_grad():
+        out = model(t)
+    return float(scaler_y.inverse_transform(out.numpy())[0, 0])
+
+
+# ── Endpoints ──────────────────────────────────────────────────────────────────
+@app.get("/")
+def root():
+    model, _, _ = get_model()
+    return {
+        "status":       "NeuralPricer API running",
+        "model_loaded": model is not None,
+        "version":      "1.0.0",
+    }
+
+
+@app.get("/api/health")
+def health():
+    model, _, _ = get_model()
+    return {"status": "ok", "model_ready": model is not None}
+
+
+@app.post("/api/price")
+def price_option(req: PriceRequest):
+    model, scaler_X, scaler_y = get_model()
+
+    bs_out = bs_price_and_greeks(req.S, req.K, req.T, req.r, req.sigma, req.is_call)
+    bs_p   = bs_out["price"]
+
+    result = {
+        "bs_price": round(bs_p, 4),
+        "greeks":   {k: round(v, 6) for k, v in bs_out["greeks"].items()},
+        "inputs":   req.dict(),
+    }
+
+    if model is not None:
+        features = build_features(req)
+        nn_p     = nn_infer(features, model, scaler_X, scaler_y)
+        result["nn_price"]   = round(nn_p, 4)
+        result["abs_error"]  = round(abs(nn_p - bs_p), 6)
+        result["pct_error"]  = round(abs(nn_p - bs_p) / bs_p * 100, 4) if bs_p > 0 else 0
+    else:
+        result["nn_price"]  = None
+        result["abs_error"] = None
+        result["pct_error"] = None
+        result["note"]      = "Model not loaded — showing BS price only. Train the model first."
+
+    return result
+
+
+@app.post("/api/price/batch")
+def price_batch(requests_list: list[PriceRequest]):
+    model, scaler_X, scaler_y = get_model()
+    results = []
+    for req in requests_list:
+        try:
+            bs  = bs_price_and_greeks(req.S, req.K, req.T, req.r, req.sigma, req.is_call)
+            row = {"bs_price": bs["price"], "greeks": bs["greeks"]}
+            if model:
+                nn_p = nn_infer(build_features(req), model, scaler_X, scaler_y)
+                row["nn_price"] = round(nn_p, 4)
+            results.append(row)
+        except Exception as e:
+            results.append({"error": str(e)})
+    return results
+
+
+@app.get("/api/live-chain/{currency}")
+def live_chain(currency: str = "BTC"):
+    try:
+        df = fetch_full_snapshot(currency.upper())
+        if df.empty:
+            raise HTTPException(status_code=404, detail="No data returned from Deribit")
+
+        model, scaler_X, scaler_y = get_model()
+        top = df.head(50).copy()
+        nn_prices = []
+
+        for _, row in top.iterrows():
+            if model is not None:
+                try:
+                    f    = np.array([[row.S, row.K, row.T, row.r, row.sigma,
+                                      row.is_call, row.moneyness,
+                                      row.log_moneyness, row.sqrt_T]])
+                    nn_p = nn_infer(f, model, scaler_X, scaler_y)
+                    nn_prices.append(round(nn_p, 2))
+                except Exception:
+                    nn_prices.append(None)
+            else:
+                nn_prices.append(None)
+
+        top["nn_price"] = nn_prices
+        return top.fillna(0).to_dict(orient="records")
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

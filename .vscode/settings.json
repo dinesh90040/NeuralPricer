@@ -1,0 +1,11 @@
+{
+    "markdown.validate.enabled": false,
+    "python.defaultInterpreterPath": "C:\\Dinesh\\neuralpricer\\venv\\Scripts\\python.exe",
+    "python.venvPath": "${workspaceFolder}",
+    "python.analysis.extraPaths": [
+        "${workspaceFolder}/venv/Lib/site-packages"
+    ],
+    "python.autoComplete.extraPaths": [
+        "${workspaceFolder}/venv/Lib/site-packages"
+    ]
+}
