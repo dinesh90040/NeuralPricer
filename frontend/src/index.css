@@ -1,0 +1,217 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── Theme tokens (space-separated RGB so Tailwind alpha modifiers work) ─── */
+:root {
+  --np-bg: 13 17 23;
+  --np-panel: 22 27 34;
+  --np-border: 48 54 61;
+  --np-accent: 88 166 255;
+  --np-green: 63 185 80;
+  --np-red: 248 81 73;
+  --np-amber: 210 153 34;
+  --np-muted: 139 148 158;
+  --np-text: 230 237 243;
+  --np-violet: 188 140 255;
+  --np-cyan: 57 210 192;
+  --np-grid-line: 48 54 61;
+  --np-chart-grid: #30363D;
+  color-scheme: dark;
+}
+
+html.light {
+  --np-bg: 246 248 250;
+  --np-panel: 255 255 255;
+  --np-border: 208 215 222;
+  --np-accent: 31 111 235;
+  --np-green: 26 127 55;
+  --np-red: 207 34 46;
+  --np-amber: 154 103 0;
+  --np-muted: 87 96 106;
+  --np-text: 31 35 40;
+  --np-violet: 130 80 223;
+  --np-cyan: 15 112 116;
+  --np-grid-line: 208 215 222;
+  --np-chart-grid: #D0D7DE;
+  color-scheme: light;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  background-color: rgb(var(--np-bg));
+  color: rgb(var(--np-text));
+  font-family: "Inter", system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Subtle blueprint grid background for the quant-terminal feel */
+.bg-grid {
+  background-image:
+    linear-gradient(rgb(var(--np-grid-line) / 0.25) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(var(--np-grid-line) / 0.25) 1px, transparent 1px);
+  background-size: 32px 32px;
+  background-position: -1px -1px;
+}
+
+/* Glow accents */
+.glow-accent {
+  box-shadow: 0 0 24px rgba(88, 166, 255, 0.12);
+}
+.glow-green {
+  box-shadow: 0 0 24px rgba(63, 185, 80, 0.12);
+}
+
+/* ── Landing / auth page extras ───────────────────────────────────────────── */
+
+/* Gradient headline text */
+.text-gradient {
+  background-image: linear-gradient(100deg, rgb(var(--np-accent)), rgb(var(--np-violet)) 55%, rgb(var(--np-cyan)));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* Blurred color orbs for hero / auth backgrounds */
+.orb {
+  position: absolute;
+  border-radius: 9999px;
+  filter: blur(72px);
+  pointer-events: none;
+  will-change: transform;
+}
+
+/* Scroll reveal (driven by IntersectionObserver) */
+.reveal {
+  opacity: 0;
+  transform: translateY(26px);
+  transition: opacity 0.7s cubic-bezier(0.22, 1, 0.36, 1), transform 0.7s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.reveal.visible {
+  opacity: 1;
+  transform: none;
+}
+
+/* Infinite marquee strip */
+.marquee-mask {
+  overflow: hidden;
+  mask-image: linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent);
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent);
+}
+.marquee-track {
+  display: flex;
+  width: max-content;
+  animation: marquee 38s linear infinite;
+}
+.marquee-track:hover {
+  animation-play-state: paused;
+}
+@keyframes marquee {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+
+/* Shimmer sweep for headline words */
+.shimmer-text {
+  background: linear-gradient(90deg, rgb(var(--np-text)) 35%, rgb(var(--np-accent)) 50%, rgb(var(--np-text)) 65%);
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: shimmerText 4.5s linear infinite;
+}
+@keyframes shimmerText {
+  from { background-position: 200% 0; }
+  to { background-position: -200% 0; }
+}
+
+/* Thin dotted connector for the pipeline section */
+.pipe-dots {
+  background-image: radial-gradient(circle, rgb(var(--np-muted)) 1.5px, transparent 1.5px);
+  background-size: 10px 10px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reveal { opacity: 1; transform: none; transition: none; }
+  .marquee-track, .shimmer-text, .animate-float, .animate-float-slow { animation: none !important; }
+}
+
+/* Custom range sliders */
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 4px;
+  border-radius: 999px;
+  background: rgb(var(--np-border));
+  outline: none;
+  cursor: pointer;
+}
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: rgb(var(--np-accent));
+  border: 2px solid rgb(var(--np-bg));
+  box-shadow: 0 0 0 1px rgb(var(--np-accent)), 0 0 10px rgba(88, 166, 255, 0.5);
+  transition: transform 0.15s ease;
+}
+input[type="range"]::-webkit-slider-thumb:hover {
+  transform: scale(1.25);
+}
+input[type="range"]::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: rgb(var(--np-accent));
+  border: 2px solid rgb(var(--np-bg));
+  box-shadow: 0 0 0 1px rgb(var(--np-accent));
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: rgb(var(--np-panel));
+}
+::-webkit-scrollbar-thumb {
+  background: rgb(var(--np-border));
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgb(var(--np-accent));
+}
+
+/* Number input spinners: hide for cleaner look */
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+/* Skeleton loading shimmer */
+.skeleton {
+  background: linear-gradient(90deg, rgb(var(--np-panel)) 25%, rgb(var(--np-border) / 0.55) 50%, rgb(var(--np-panel)) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.4s ease-in-out infinite;
+}
+@keyframes shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
