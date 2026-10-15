@@ -76,8 +76,21 @@ export const priceBatch = (list) =>
 export const fetchGreeks = (params) =>
   apiFetch("/api/greeks", { method: "POST", body: JSON.stringify(params) });
 
-export const fetchLiveChain = (currency = "BTC") =>
-  apiFetch(`/api/live-chain/${currency}`);
+export const fetchSpot = (currency = "BTC") =>
+  apiFetch(`/api/spot/${currency}`);
+
+export const fetchCandles = (currency = "BTC", resolution = "5", hours = 24) =>
+  apiFetch(`/api/candles/${currency}?resolution=${encodeURIComponent(resolution)}&hours=${hours}`);
+
+export const fetchChain = (currency = "BTC", expiry = null) => {
+  const query = expiry ? `?expiry=${encodeURIComponent(expiry)}` : "";
+  return apiFetch(`/api/live-chain/${currency}${query}`);
+};
+
+export const fetchLiveChain = async (currency = "BTC") => {
+  const result = await fetchChain(currency);
+  return result.items || [];
+};
 
 export const checkHealth = () => apiFetch("/api/health", {}, 8000);
 

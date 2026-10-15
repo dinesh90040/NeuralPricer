@@ -1182,22 +1182,15 @@ Create `frontend/src/pages/Benchmark.jsx`:
 ```bash
 cat > frontend/src/pages/Benchmark.jsx << 'JSEOF'
 import React from "react";
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
-
-const speedData = [
-  { name: "NeuralPricer\n(GPU)", ms: 3.2,    color: "#3FB950" },
-  { name: "Black-Scholes\n(CPU)", ms: 48,    color: "#58A6FF" },
-  { name: "Monte Carlo\n10k paths", ms: 26400, color: "#F85149" },
-];
 
 const accuracyRows = [
-  ["RMSE",            "$0.084"],
-  ["MAE",             "$0.041"],
-  ["R²",              "0.99971"],
-  ["Max error",       "$1.23"],
-  ["Speedup vs MC",   "8,250×"],
-  ["Training time",   "~35 min (T4)"],
-  ["Inference batch", "50,000 contracts"],
+  ["Held-out real test rows", "6,754"],
+  ["Fine-tuned NN MAE", "$80.38 (0.1561% of spot)"],
+  ["Black-Scholes mark-IV MAE", "$23.15 (0.0415% of spot)"],
+  ["Fine-tuned NN RMSE", "$147.67"],
+  ["Black-Scholes mark-IV RMSE", "$39.52"],
+  ["Fine-tuned NN R²", "0.99881"],
+  ["Black-Scholes mark-IV R²", "0.99991"],
 ];
 
 export default function Benchmark() {
@@ -1206,32 +1199,11 @@ export default function Benchmark() {
       <div>
         <h1 className="text-xl font-semibold text-np-text">Benchmark</h1>
         <p className="text-sm text-np-muted mt-1">
-          NeuralPricer vs Black-Scholes vs Monte Carlo — speed and accuracy over 50,000 contracts.
+          Stored held-out test metrics, plus a live latency test against your running API.
         </p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-        <div className="bg-np-panel border border-np-border rounded-xl p-5">
-          <h2 className="text-sm font-semibold text-np-text mb-4">Inference speed (ms, 50k contracts)</h2>
-          <ResponsiveContainer width="100%" height={200}>
-            <BarChart data={speedData} layout="vertical">
-              <XAxis type="number" tick={{ fill: "#8B949E", fontSize: 11 }}
-                tickFormatter={(v) => v >= 1000 ? `${(v/1000).toFixed(0)}s` : `${v}ms`} />
-              <YAxis type="category" dataKey="name" width={90}
-                tick={{ fill: "#8B949E", fontSize: 10, fontFamily: "monospace" }} />
-              <Tooltip
-                contentStyle={{ background: "#161B22", border: "1px solid #30363D",
-                                borderRadius: 8, fontFamily: "monospace", fontSize: 12 }}
-                formatter={(v) => [v >= 1000 ? `${(v/1000).toFixed(1)}s` : `${v}ms`, "time"]} />
-              <Bar dataKey="ms" radius={[0, 4, 4, 0]}>
-                {speedData.map((entry, i) => (
-                  <Cell key={i} fill={entry.color} />
-                ))}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-
+      <div className="grid grid-cols-1 gap-5">
         <div className="bg-np-panel border border-np-border rounded-xl p-5">
           <h2 className="text-sm font-semibold text-np-text mb-4">Accuracy metrics</h2>
           <table className="w-full text-sm font-mono">
@@ -1250,10 +1222,9 @@ export default function Benchmark() {
       <div className="bg-np-panel border border-np-border rounded-xl p-5">
         <h2 className="text-sm font-semibold text-np-text mb-2">Key takeaway</h2>
         <p className="text-sm text-np-muted leading-relaxed">
-          NeuralPricer is <span className="text-np-accent font-mono font-semibold">8,250×</span> faster
-          than Monte Carlo pricing while achieving R² of <span className="text-np-green font-mono font-semibold">0.99971</span> against
-          the analytical Black-Scholes formula. The model was trained for ~35 minutes on a free
-          Google Colab T4 GPU. Once deployed, a batch of 50,000 contracts is priced in under 4ms.
+          On the held-out expiry-based real-option test split, the fine-tuned neural network's MAE
+          was 0.1561% of spot, compared with 0.0415% for the Black-Scholes mark-IV baseline. This
+          evaluation is not an out-of-time test, and the neural model did not beat the baseline.
         </p>
       </div>
     </div>
@@ -1721,7 +1692,7 @@ run_snapshot_loop(n_snapshots=288, interval_seconds=300)
 "
 ```
 
-Open `http://localhost:3000` in your browser. All four dashboard pages should now be fully functional.
+Open `http://localhost:3000` in your browser. The dashboard shows Deribit BTC/ETH index prices, perpetual candles, and an expiry-filtered options chain with NN and Black-Scholes comparisons.
 
 ---
 

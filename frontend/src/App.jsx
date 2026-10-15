@@ -1,17 +1,28 @@
-import React, { useEffect, useState } from "react";
+import React, { lazy, Suspense, useEffect, useState } from "react";
 import Navbar, { useApiHealth } from "./components/Navbar";
-import Landing from "./pages/Landing";
-import Login from "./pages/Login";
-import Signup from "./pages/Signup";
-import Pricer from "./pages/Pricer";
-import Greeks from "./pages/Greeks";
-import LiveChain from "./pages/LiveChain";
-import Surface from "./pages/Surface";
-import Benchmark from "./pages/Benchmark";
 import { useTheme } from "./theme";
 import { getToken, setToken, logout as apiLogout, me as apiMe } from "./api/neuralpricer";
 
+const Landing = lazy(() => import("./pages/Landing"));
+const Dashboard = lazy(() => import("./pages/Dashboard"));
+const Login = lazy(() => import("./pages/Login"));
+const Signup = lazy(() => import("./pages/Signup"));
+const Pricer = lazy(() => import("./pages/Pricer"));
+const Greeks = lazy(() => import("./pages/Greeks"));
+const LiveChain = lazy(() => import("./pages/LiveChain"));
+const Surface = lazy(() => import("./pages/Surface"));
+const Benchmark = lazy(() => import("./pages/Benchmark"));
+
 const USER_KEY = "np_user";
+
+function PageLoading() {
+  return (
+    <div className="flex min-h-48 items-center justify-center gap-3 text-sm font-mono text-np-muted" role="status">
+      <span className="h-4 w-4 animate-spin rounded-full border-2 border-np-accent border-t-transparent" />
+      Loading page…
+    </div>
+  );
+}
 
 function loadUser() {
   try {
@@ -25,7 +36,7 @@ function loadUser() {
 export default function App() {
   const { theme, toggle } = useTheme();
   const [route, setRoute] = useState("landing"); // landing | login | signup | app
-  const [page, setPage] = useState("pricer"); // dashboard tab
+  const [page, setPage] = useState("dashboard");
   const [user, setUser] = useState(loadUser);
   const { health, lastLatency } = useApiHealth(10000);
 
@@ -74,16 +85,29 @@ export default function App() {
   };
 
   if (route === "landing") {
-    return <Landing theme={theme} onToggleTheme={toggle} onNavigate={navigate} health={health} />;
+    return (
+      <Suspense fallback={<PageLoading />}>
+        <Landing theme={theme} onToggleTheme={toggle} onNavigate={navigate} health={health} />
+      </Suspense>
+    );
   }
   if (route === "login") {
-    return <Login theme={theme} onToggleTheme={toggle} onNavigate={navigate} onAuth={handleAuth} />;
+    return (
+      <Suspense fallback={<PageLoading />}>
+        <Login theme={theme} onToggleTheme={toggle} onNavigate={navigate} onAuth={handleAuth} />
+      </Suspense>
+    );
   }
   if (route === "signup") {
-    return <Signup theme={theme} onToggleTheme={toggle} onNavigate={navigate} onAuth={handleAuth} />;
+    return (
+      <Suspense fallback={<PageLoading />}>
+        <Signup theme={theme} onToggleTheme={toggle} onNavigate={navigate} onAuth={handleAuth} />
+      </Suspense>
+    );
   }
 
   const pages = {
+    dashboard: <Dashboard health={health} theme={theme} />,
     pricer:    <Pricer />,
     greeks:    <Greeks />,
     chain:     <LiveChain />,
@@ -103,7 +127,9 @@ export default function App() {
         onLogout={handleLogout}
         onHome={() => setRoute("landing")}
       />
-      <main className="max-w-7xl mx-auto px-4 md:px-6 py-8">{pages[page]}</main>
+      <main className="max-w-7xl mx-auto px-4 md:px-6 py-8">
+        <Suspense fallback={<PageLoading />}>{pages[page]}</Suspense>
+      </main>
       <footer className="max-w-7xl mx-auto px-4 md:px-6 pb-8 pt-2 flex flex-wrap gap-x-6 gap-y-1 text-xs font-mono text-np-muted/70">
         <span>⚡ NeuralPricer v1.0.0</span>
         <span>Flask · MongoDB · PyTorch · Deribit + yfinance live data</span>

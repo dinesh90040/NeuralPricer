@@ -18,6 +18,7 @@ import sys
 import numpy as np
 import pandas as pd
 import joblib
+import sklearn
 from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
@@ -182,6 +183,10 @@ def main():
         "best_val_loss": float(best_val),
         "rows": int(len(df)),
         "device": str(device),
+        "training_environment": {
+            "torch": torch.__version__,
+            "scikit_learn": sklearn.__version__,
+        },
     }
     print(f"Test RMSE : {metrics['rmse']:.4f}")
     print(f"Test MAE  : {metrics['mae']:.4f}")

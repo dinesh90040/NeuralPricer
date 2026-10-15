@@ -4,7 +4,7 @@ import {
   CartesianGrid, ReferenceLine,
 } from "recharts";
 import { RefreshCw, Search, ArrowUpDown } from "lucide-react";
-import { fetchLiveChain } from "../api/neuralpricer";
+import { fetchChain } from "../api/neuralpricer";
 import {
   Panel, PageHeader, MetricCard, ErrorBanner, Loading, SkeletonRows,
   CHART_TOOLTIP, AXIS_TICK,
@@ -19,7 +19,7 @@ const COLUMNS = [
   { key: "is_call",        label: "Type",       sortable: true },
   { key: "mid_price",      label: "Mid Price",  sortable: true, num: true },
   { key: "nn_price",       label: "NN Price",   sortable: true, num: true },
-  { key: "gapPct",         label: "NN−Mid %",   sortable: true, num: true },
+  { key: "gapPct",         label: "NN vs market mid %", sortable: true, num: true },
 ];
 
 export default function LiveChain() {
@@ -33,15 +33,17 @@ export default function LiveChain() {
   const [typeFilter, setTypeFilter] = useState("all"); // all | call | put
   const [sort, setSort] = useState({ key: "instrument", dir: 1 });
   const [elapsed, setElapsed] = useState(null);
+  const [stale, setStale] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     const t0 = performance.now();
     try {
-      const rows = await fetchLiveChain(currency);
-      setData(rows);
-      setLastFetch(new Date().toLocaleTimeString());
+      const result = await fetchChain(currency);
+      setData(result.items || []);
+      setStale(!!result.stale);
+      setLastFetch(result.last_updated ? new Date(result.last_updated).toLocaleTimeString() : new Date().toLocaleTimeString());
       setElapsed(((performance.now() - t0) / 1000).toFixed(1));
     } catch (e) {
       setError(e.message);
@@ -54,7 +56,7 @@ export default function LiveChain() {
 
   useEffect(() => {
     if (!autoRefresh) return;
-    const id = setInterval(load, 60000); // refresh every 60s
+    const id = setInterval(load, 30000);
     return () => clearInterval(id);
   }, [autoRefresh, load]);
 
@@ -151,9 +153,9 @@ export default function LiveChain() {
                 ${autoRefresh
                   ? "border-np-green text-np-green bg-np-green/10"
                   : "border-np-border text-np-muted hover:text-np-text"}`}
-              title="Auto-refresh every 60 seconds"
+              title="Auto-refresh every 30 seconds"
             >
-              {autoRefresh ? "◉ auto 60s" : "○ auto"}
+              {autoRefresh ? "◉ auto 30s" : "○ auto"}
             </button>
             <button
               onClick={load}
@@ -169,6 +171,7 @@ export default function LiveChain() {
       />
 
       <ErrorBanner message={error} />
+      {stale && <p className="text-xs font-mono text-np-amber">Showing cached chain data; the latest Deribit refresh failed.</p>}
 
       {stats && (
         <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-6 gap-4 animate-fade-in">
@@ -299,6 +302,9 @@ export default function LiveChain() {
           </div>
         )}
       </Panel>
+      <p className="text-[11px] font-mono text-np-muted">
+        NN vs market mid is an estimate comparison, not a trading signal. The percentage gap can look large on very cheap options.
+      </p>
 
       {/* IV smile */}
       {smiles.call.length + smiles.put.length > 0 && (

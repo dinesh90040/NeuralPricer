@@ -89,7 +89,14 @@ def _rows_from_summary(summary, spot, risk_free_rate, currency, now_utc):
         bid = item.get("bid_price")
         ask = item.get("ask_price")
         mark_iv = item.get("mark_iv")
-        if not name or bid is None or ask is None or not mark_iv:
+        if (
+            not name
+            or bid is None
+            or ask is None
+            or bid <= 0
+            or ask <= 0
+            or not mark_iv
+        ):
             continue
 
         parsed = _parse_instrument_name(name)
@@ -103,6 +110,7 @@ def _rows_from_summary(summary, spot, risk_free_rate, currency, now_utc):
         mid_price = (bid + ask) / 2 * spot
         rows.append({
             "instrument":    name,
+            "expiry":        expiry_dt.date().isoformat(),
             "S":             spot,
             "K":             strike,
             "T":             T,
@@ -154,7 +162,7 @@ def fetch_full_snapshot(currency="BTC", risk_free_rate=0.045):
                 continue
             bid = ticker.get("best_bid_price")
             ask = ticker.get("best_ask_price")
-            if bid is None or ask is None:
+            if bid is None or ask is None or bid <= 0 or ask <= 0:
                 continue
 
             expiry_ms = instr["expiration_timestamp"]
@@ -165,6 +173,7 @@ def fetch_full_snapshot(currency="BTC", risk_free_rate=0.045):
 
             rows.append({
                 "instrument":    instr["instrument_name"],
+                "expiry":        expiry_dt.date().isoformat(),
                 "S":             spot,
                 "K":             float(instr["strike"]),
                 "T":             T,
@@ -203,7 +212,7 @@ def fetch_full_snapshot(currency="BTC", risk_free_rate=0.045):
 
 
 def run_snapshot_loop(
-    n_snapshots=48,
+    n_snapshots=79,
     interval_seconds=300,
     currencies=None,
     save_dir="data/snapshots",

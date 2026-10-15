@@ -1,29 +1,21 @@
 import React, { useMemo, useRef, useState } from "react";
 import {
-  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell,
-  CartesianGrid, ReferenceLine, LineChart, Line,
+  XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, ReferenceLine, LineChart, Line,
 } from "recharts";
-import { Zap, Cpu, Dice5, Radio } from "lucide-react";
+import { Radio } from "lucide-react";
 import { priceOption, API_BASE } from "../api/neuralpricer";
 import {
   Panel, PageHeader, MetricCard, ErrorBanner, Loading, CHART_TOOLTIP, AXIS_TICK,
 } from "../components/ui";
 
-/* Reference numbers from the guides (README / SETUP_GUIDE): */
-const speedData = [
-  { name: "NeuralPricer (GPU)", ms: 3.2, color: "#3FB950", icon: "zap" },
-  { name: "Black-Scholes (CPU)", ms: 48, color: "#58A6FF", icon: "cpu" },
-  { name: "Monte Carlo 10k paths", ms: 26400, color: "#F85149", icon: "dice" },
-];
-
 const accuracyRows = [
-  ["RMSE", "$0.084"],
-  ["MAE", "$0.041"],
-  ["R²", "0.99971"],
-  ["Max error", "$1.23"],
-  ["Speedup vs MC", "8,250×"],
-  ["Training time", "~35 min (T4)"],
-  ["Inference batch", "50,000 contracts"],
+  ["Held-out real test rows", "6,754"],
+  ["Fine-tuned NN MAE", "$80.38 · 0.1561% of spot"],
+  ["Black–Scholes mark-IV MAE", "$23.15 · 0.0415% of spot"],
+  ["Fine-tuned NN RMSE", "$147.67"],
+  ["Black–Scholes mark-IV RMSE", "$39.52"],
+  ["Fine-tuned NN R²", "0.99881"],
+  ["Black–Scholes mark-IV R²", "0.99991"],
 ];
 
 const SAMPLE = { S: 85000, K: 85000, T: 0.25, r: 0.045, sigma: 0.65, is_call: 1 };
@@ -82,57 +74,20 @@ export default function Benchmark({ health }) {
     [latencies]
   );
 
-  const icons = { zap: Zap, cpu: Cpu, dice: Dice5 };
-
   return (
     <div className="space-y-6 max-w-6xl mx-auto">
       <PageHeader
         title="Benchmark"
-        subtitle="NeuralPricer vs Black-Scholes vs Monte Carlo — reference numbers from the guides, plus a live latency test against your running API."
+        subtitle="Stored metrics for the expiry-based held-out real-option test split, plus a live latency test against your running API."
       />
 
       <ErrorBanner message={error} />
 
-      {/* Reference speed + accuracy */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-        <Panel className="p-5">
-          <h2 className="text-sm font-semibold text-np-text mb-4 flex items-center gap-2">
-            <span className="w-1 h-4 bg-np-green rounded-full" />
-            Inference speed — 50k contracts (log scale)
-          </h2>
-          <ResponsiveContainer width="100%" height={210}>
-            <BarChart data={speedData} layout="vertical" margin={{ top: 5, right: 16, left: 8, bottom: 5 }}>
-              <CartesianGrid stroke="var(--np-chart-grid)" strokeDasharray="3 3" strokeOpacity={0.5} horizontal={false} />
-              <XAxis type="number" tick={AXIS_TICK} axisLine={{ stroke: "var(--np-chart-grid)" }} tickLine={false}
-                scale="log" domain={[1, 100000]}
-                tickFormatter={(v) => (v >= 1000 ? `${v / 1000}s` : `${v}ms`)}
-                ticks={[1, 10, 100, 1000, 10000, 100000]} />
-              <YAxis type="category" dataKey="name" width={140} tick={AXIS_TICK}
-                axisLine={false} tickLine={false} tickFormatter={(v) => v} />
-              <Tooltip contentStyle={CHART_TOOLTIP}
-                cursor={{ fill: "rgba(88,166,255,0.06)" }}
-                formatter={(v) => [v >= 1000 ? `${(v / 1000).toFixed(1)}s` : `${v}ms`, "time"]} />
-              <Bar dataKey="ms" radius={[0, 4, 4, 0]} barSize={22}>
-                {speedData.map((e, i) => (
-                  <Cell key={i} fill={e.color} />
-                ))}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
-          <div className="flex gap-4 mt-3 text-[11px] font-mono text-np-muted">
-            {speedData.map((d) => (
-              <span key={d.name} className="flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full" style={{ background: d.color }} />
-                {d.name}
-              </span>
-            ))}
-          </div>
-        </Panel>
-
+      <div className="grid grid-cols-1 gap-5">
         <Panel className="p-5">
           <h2 className="text-sm font-semibold text-np-text mb-4 flex items-center gap-2">
             <span className="w-1 h-4 bg-np-accent rounded-full" />
-            Accuracy metrics (held-out test set)
+            Accuracy metrics (real-option test split)
           </h2>
           <table className="w-full text-sm font-mono">
             <tbody>
@@ -205,20 +160,17 @@ export default function Benchmark({ health }) {
         {!stats && !running && (
           <p className="text-xs text-np-muted font-mono">
             Run the benchmark to measure real round-trip latency: browser → Flask → Black-Scholes
-            {health?.model_ready ? " → PyTorch NN" : " (NN inactive until a model is trained)"} → browser.
+            {health?.model_loaded || health?.model_ready ? " → PyTorch NN" : " (NN unavailable)"} → browser.
           </p>
         )}
       </Panel>
 
-      {/* Key takeaway */}
       <Panel className="p-5">
         <h2 className="text-sm font-semibold text-np-text mb-2">Key takeaway</h2>
         <p className="text-sm text-np-muted leading-relaxed">
-          NeuralPricer is <span className="text-np-accent font-mono font-semibold">8,250×</span> faster
-          than Monte Carlo pricing while achieving R² of <span className="text-np-green font-mono font-semibold">0.99971</span> against
-          the analytical Black-Scholes formula. The model was trained for ~35 minutes on a free
-          Google Colab T4 GPU. Once deployed, a batch of 50,000 contracts is priced in under 4ms —
-          while the live numbers above show what your own API actually delivers right now.
+          On this expiry-based hold-out split, the fine-tuned NN did not beat Black–Scholes using mark IV:
+          its mean absolute error was 0.1561% of spot versus 0.0415% for the Black–Scholes baseline.
+          The live test above measures this app's current API latency; it is not a 50,000-contract benchmark.
         </p>
       </Panel>
     </div>

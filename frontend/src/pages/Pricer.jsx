@@ -225,12 +225,15 @@ export default function Pricer() {
               sub="|NN − BS|"
             />
             <MetricCard
-              label="Error %"
+              label="NN vs Black-Scholes %"
               value={result.pct_error != null ? `${result.pct_error.toFixed(3)}%` : "—"}
               color={result.pct_error != null ? "text-np-green" : "text-np-muted"}
-              sub="relative deviation"
+              sub="relative to BS price"
             />
           </div>
+          {result.bs_price < 5 && result.pct_error != null && (
+            <NoteBanner message="The NN-vs-Black-Scholes percentage gap can look large when the option price is very cheap." />
+          )}
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Greeks */}

@@ -107,8 +107,8 @@ export default function AuthLayout({ theme, onToggleTheme, onNavigate, children 
 
         <div className="relative grid grid-cols-3 gap-3">
           {[
-            { k: "409K", v: "dataset rows" },
-            { k: "6ms", v: "median price" },
+            { k: "522K", v: "training rows*" },
+            { k: "79", v: "Deribit snapshots" },
             { k: "5", v: "greeks" },
           ].map((s) => (
             <div key={s.v} className="border border-np-border rounded-lg px-3 py-2.5 bg-np-bg/60 backdrop-blur">
@@ -116,6 +116,9 @@ export default function AuthLayout({ theme, onToggleTheme, onNavigate, children 
               <p className="text-[10px] uppercase tracking-wider text-np-muted">{s.v}</p>
             </div>
           ))}
+          <p className="col-span-3 text-[9px] font-mono text-np-muted/70">
+            *400K synthetic + 122,471 clean real rows
+          </p>
         </div>
       </aside>
 

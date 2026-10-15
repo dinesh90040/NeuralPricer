@@ -15,6 +15,15 @@
     "replay": 1.0
   },
   "exported": "NN fine-tuned",
+  "training_environment": {
+    "torch": "not recorded in the supplied model artifacts",
+    "scikit_learn": "1.6.1 (recorded in the serialized StandardScaler)"
+  },
+  "inference_environment": {
+    "torch": "2.13.0+cpu",
+    "scikit_learn": "1.9.0",
+    "source": "backend virtual environment"
+  },
   "raw_rows": 127322,
   "clean_rows": 122471,
   "snapshots": 79,

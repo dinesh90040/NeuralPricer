@@ -252,7 +252,7 @@ const FEATURES = [
     body: "In-browser latency tests measure median, p95 and throughput on your own machine, call by call." },
   { icon: Database, color: "text-np-red", bg: "bg-np-red/10", border: "border-np-red/30",
     title: "Hybrid dataset",
-    body: "409K rows blending real Deribit snapshots with calibrated synthetic quotes, shipped as Parquet." },
+    body: "522,471 examples: 400,000 synthetic quotes and 122,471 clean real Deribit rows." },
 ];
 
 const PIPELINE = [
@@ -375,9 +375,9 @@ export default function Landing({ theme, onToggleTheme, onNavigate, health }) {
 
             <div className="mt-10 grid grid-cols-2 sm:grid-cols-4 gap-4 max-w-2xl">
               {[
-                { to: 409223, suffix: "", label: "training rows", decimals: 0 },
-                { to: 9, suffix: "", label: "model features", decimals: 0 },
-                { to: 6, suffix: " ms", label: "median latency", decimals: 0 },
+                { to: 400000, suffix: "", label: "synthetic training rows", decimals: 0 },
+                { to: 122471, suffix: "", label: "clean real rows", decimals: 0 },
+                { to: 79, suffix: "", label: "Deribit snapshots", decimals: 0 },
                 { to: 5, suffix: "", label: "greeks tracked", decimals: 0 },
               ].map((s, i) => (
                 <Reveal key={s.label} delay={i * 90}>
@@ -562,10 +562,10 @@ export default function Landing({ theme, onToggleTheme, onNavigate, health }) {
             <div className="mt-4 bg-np-panel border border-np-border rounded-2xl p-5 flex items-start gap-3">
               <Sparkles size={16} className="text-np-cyan mt-0.5 shrink-0" />
               <p className="text-sm text-np-muted leading-relaxed">
-                Reference comparison from the model card: the network answers in{" "}
-                <span className="text-np-green font-mono">3.2 ms</span> vs Black-Scholes at{" "}
-                <span className="text-np-accent font-mono">48 ms</span> and Monte Carlo at{" "}
-                <span className="text-np-red font-mono">26.4 s</span> — three orders of magnitude apart.
+                On the held-out real-option test split, the fine-tuned network's MAE was{" "}
+                <span className="text-np-green font-mono">0.156% of spot</span>; the Black–Scholes
+                mark-IV baseline measured <span className="text-np-accent font-mono">0.0415% of spot</span>.
+                The neural model is an estimate and did not beat this baseline on that split.
               </p>
             </div>
           </Reveal>

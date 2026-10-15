@@ -9,10 +9,12 @@ Run:  python main.py        (http://127.0.0.1:8000)
 
 import os
 import re
+import threading
 import uuid
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 
 import numpy as np
+import requests
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 from werkzeug.security import check_password_hash, generate_password_hash
@@ -38,7 +40,7 @@ except Exception as _torch_err:  # pragma: no cover - environment dependent
     print(f"[NeuralPricer] torch unavailable, NN disabled: {_torch_err}")
 
 from black_scholes import bs_price_and_greeks
-from data_collector import fetch_full_snapshot
+from data_collector import fetch_full_snapshot, get_spot_price
 
 # ── App ───────────────────────────────────────────────────────────────────────
 app = Flask(__name__)
@@ -94,11 +96,27 @@ def mongo_ok():
 
 
 # ── Model + scalers ───────────────────────────────────────────────────────────
-MODEL_DIR = os.getenv("MODEL_DIR", "../models")
+_BACKEND_DIR = os.path.dirname(os.path.abspath(__file__))
+_configured_model_dir = os.getenv("MODEL_DIR", "../models")
+MODEL_DIR = (
+    _configured_model_dir
+    if os.path.isabs(_configured_model_dir)
+    else os.path.normpath(os.path.join(_BACKEND_DIR, _configured_model_dir))
+)
 
 _model = None
 _scaler_X = None
 _scaler_y = None
+_market_cache_lock = threading.Lock()
+_spot_cache = {}
+_chain_cache = {}
+MARKET_CACHE_TTL_SECONDS = 3
+
+CHAIN_FEATURES = [
+    "S", "K", "T", "r", "sigma", "is_call",
+    "moneyness", "log_moneyness", "sqrt_T",
+]
+BATCH_INFERENCE_CHUNK_SIZE = 128
 
 
 def get_model():
@@ -114,7 +132,7 @@ def get_model():
             return None, None, None
 
         try:
-            _model = torch.jit.load(model_path, map_location="cpu")
+            _model = torch.jit.load(model_path, map_location="cpu").double()
             _model.eval()
             _scaler_X = joblib.load(sx_path)
             _scaler_y = joblib.load(sy_path)
@@ -153,10 +171,26 @@ def build_features(p):
 
 def nn_infer(features, model, scaler_X, scaler_y):
     X_s = scaler_X.transform(features)
-    t = torch.tensor(X_s, dtype=torch.float32)
+    t = torch.tensor(X_s, dtype=torch.float64)
     with torch.no_grad():
         out = model(t)
     return float(scaler_y.inverse_transform(out.numpy())[0, 0])
+
+
+def nn_infer_batch(df, model, scaler_X, scaler_y):
+    if df.empty:
+        return np.empty(0, dtype=float)
+    features = df[CHAIN_FEATURES].to_numpy(dtype=float)
+    scaled = scaler_X.transform(features)
+    predictions = []
+    with torch.no_grad():
+        for start in range(0, len(scaled), BATCH_INFERENCE_CHUNK_SIZE):
+            batch = torch.tensor(
+                scaled[start:start + BATCH_INFERENCE_CHUNK_SIZE],
+                dtype=torch.float64,
+            )
+            predictions.append(model(batch).detach().cpu().numpy())
+    return scaler_y.inverse_transform(np.vstack(predictions)).ravel()
 
 
 def price_one(p):
@@ -249,6 +283,7 @@ def health():
     model, _, _ = get_model()
     return {
         "status": "ok",
+        "model_loaded": model is not None,
         "model_ready": model is not None,
         "torch_available": _TORCH_AVAILABLE,
         "mongo": "ok" if mongo_ok() else "down",
@@ -307,32 +342,201 @@ def greeks():
 
 @app.get("/api/live-chain/<currency>")
 def live_chain(currency):
+    currency = currency.upper()
+    if currency not in ("BTC", "ETH"):
+        return jsonify(detail="Currency must be BTC or ETH"), 400
+
+    expiry_filter = request.args.get("expiry")
+    if expiry_filter:
+        try:
+            expiry_filter = date.fromisoformat(expiry_filter).isoformat()
+        except ValueError:
+            return jsonify(detail="expiry must use YYYY-MM-DD format"), 400
+
+    now = datetime.now(timezone.utc)
+    with _market_cache_lock:
+        cached = _chain_cache.get(currency)
+        if cached and (now - cached["fetched_at"]).total_seconds() < MARKET_CACHE_TTL_SECONDS:
+            items = cached["items"]
+            filtered = [row for row in items if not expiry_filter or row["expiry"] == expiry_filter]
+            return jsonify(
+                items=filtered,
+                stale=False,
+                last_updated=cached["fetched_at"].isoformat(),
+                expiries=cached["expiries"],
+            )
+
     try:
         df = fetch_full_snapshot(currency.upper())
         if df.empty:
-            return jsonify(detail="No data returned from Deribit"), 404
-
+            raise RuntimeError("No option data returned from Deribit")
         model, scaler_X, scaler_y = get_model()
-        top = df.head(50).copy()
-        nn_prices = []
-        for _, row in top.iterrows():
-            if model is not None:
-                try:
-                    f = np.array([[row.S, row.K, row.T, row.r, row.sigma,
-                                   row.is_call, row.moneyness,
-                                   row.log_moneyness, row.sqrt_T]])
-                    nn_prices.append(round(nn_infer(f, model, scaler_X, scaler_y), 2))
-                except Exception:
-                    nn_prices.append(None)
-            else:
-                nn_prices.append(None)
+        nn_prices = (
+            nn_infer_batch(df, model, scaler_X, scaler_y)
+            if model is not None
+            else [None] * len(df)
+        )
+        if len(nn_prices) != len(df):
+            raise RuntimeError("Batched model returned an unexpected number of prices")
 
-        top["nn_price"] = nn_prices
-        # keep nn_price as null (not 0); zero-fill other numeric NaNs
-        top = top.fillna({c: 0 for c in top.columns if c != "nn_price"})
-        return jsonify(top.to_dict(orient="records"))
+        items = []
+        for row, nn_price in zip(df.to_dict(orient="records"), nn_prices):
+            bs = bs_price_and_greeks(
+                float(row["S"]), float(row["K"]), float(row["T"]),
+                float(row["r"]), float(row["sigma"]), int(row["is_call"]),
+            )
+            expiry = row.get("expiry")
+            if not expiry:
+                parsed = fetch_expiry_date(row.get("instrument", ""))
+                expiry = parsed.isoformat() if parsed else None
+            if expiry is None:
+                continue
+            items.append({
+                "instrument": row["instrument"],
+                "expiry": expiry,
+                "strike": float(row["K"]),
+                "is_call": int(row["is_call"]),
+                "spot": float(row["S"]),
+                "S": float(row["S"]),
+                "T": float(row["T"]),
+                "mark_iv": float(row["sigma"]) * 100,
+                "sigma": float(row["sigma"]),
+                "mid_price": float(row["mid_price"]),
+                "bid_usd": float(row["bid_usd"]),
+                "ask_usd": float(row["ask_usd"]),
+                "open_interest": float(row.get("open_interest") or 0),
+                "volume": float(row.get("volume") or 0),
+                "bs_price": round(float(bs["price"]), 4),
+                "bs_greeks": {key: round(float(value), 6) for key, value in bs["greeks"].items()},
+                "nn_price": None if nn_price is None else round(float(nn_price), 4),
+            })
+
+        items.sort(key=lambda row: (row["expiry"], row["strike"], -row["is_call"]))
+        expiries = sorted({row["expiry"] for row in items})
+        fetched_at = datetime.now(timezone.utc)
+        with _market_cache_lock:
+            _chain_cache[currency] = {
+                "items": items,
+                "expiries": expiries,
+                "fetched_at": fetched_at,
+            }
+        filtered = [row for row in items if not expiry_filter or row["expiry"] == expiry_filter]
+        return jsonify(
+            items=filtered,
+            stale=False,
+            last_updated=fetched_at.isoformat(),
+            expiries=expiries,
+        )
     except Exception as e:
-        return jsonify(detail=str(e)), 500
+        with _market_cache_lock:
+            cached = _chain_cache.get(currency)
+        if cached:
+            filtered = [
+                row for row in cached["items"]
+                if not expiry_filter or row["expiry"] == expiry_filter
+            ]
+            return jsonify(
+                items=filtered,
+                stale=True,
+                last_updated=cached["fetched_at"].isoformat(),
+                expiries=cached["expiries"],
+                warning=f"Deribit refresh failed; showing cached data: {e}",
+            )
+        return jsonify(detail=f"Deribit option chain unavailable: {e}"), 502
+
+
+def fetch_expiry_date(instrument):
+    parts = instrument.split("-")
+    if len(parts) < 4:
+        return None
+    try:
+        return datetime.strptime(parts[1], "%d%b%y").date()
+    except ValueError:
+        return None
+
+
+@app.get("/api/spot/<currency>")
+def spot(currency):
+    currency = currency.upper()
+    if currency not in ("BTC", "ETH"):
+        return jsonify(detail="Currency must be BTC or ETH"), 400
+
+    now = datetime.now(timezone.utc)
+    with _market_cache_lock:
+        cached = _spot_cache.get(currency)
+        if cached and (now - cached["fetched_at"]).total_seconds() < MARKET_CACHE_TTL_SECONDS:
+            return jsonify(currency=currency, spot=cached["spot"], last_updated=cached["fetched_at"].isoformat())
+
+    try:
+        spot_price = float(get_spot_price(currency))
+        if not np.isfinite(spot_price) or spot_price <= 0:
+            raise ValueError("Deribit returned an invalid index price")
+        fetched_at = datetime.now(timezone.utc)
+        with _market_cache_lock:
+            _spot_cache[currency] = {"spot": spot_price, "fetched_at": fetched_at}
+        return jsonify(currency=currency, spot=spot_price, last_updated=fetched_at.isoformat())
+    except Exception as e:
+        return jsonify(detail=f"Deribit {currency} index unavailable: {e}"), 502
+
+
+@app.get("/api/candles/<currency>")
+def candles(currency):
+    currency = currency.upper()
+    if currency not in ("BTC", "ETH"):
+        return jsonify(detail="Currency must be BTC or ETH"), 400
+    resolution = request.args.get("resolution", "5")
+    supported_resolutions = {"1", "3", "5", "10", "15", "30", "60", "120", "180", "360", "720", "1D"}
+    if resolution not in supported_resolutions:
+        return jsonify(detail="Unsupported candle resolution"), 400
+    try:
+        hours = int(request.args.get("hours", "24"))
+    except ValueError:
+        return jsonify(detail="hours must be an integer between 1 and 720"), 400
+    if hours < 1 or hours > 720:
+        return jsonify(detail="hours must be an integer between 1 and 720"), 400
+
+    end_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
+    start_ms = end_ms - hours * 60 * 60 * 1000
+    try:
+        response = requests.get(
+            "https://www.deribit.com/api/v2/public/get_tradingview_chart_data",
+            params={
+                "instrument_name": f"{currency}-PERPETUAL",
+                "start_timestamp": start_ms,
+                "end_timestamp": end_ms,
+                "resolution": resolution,
+            },
+            timeout=15,
+        )
+        response.raise_for_status()
+        result = response.json()["result"]
+        candles_data = [
+            {
+                "time": int(tick) // 1000,
+                "open": float(open_price),
+                "high": float(high),
+                "low": float(low),
+                "close": float(close),
+                "volume": float(volume),
+            }
+            for tick, open_price, high, low, close, volume in zip(
+                result.get("ticks", []),
+                result.get("open", []),
+                result.get("high", []),
+                result.get("low", []),
+                result.get("close", []),
+                result.get("volume", []),
+            )
+        ]
+        return jsonify(
+            currency=currency,
+            instrument=f"{currency}-PERPETUAL",
+            resolution=resolution,
+            candles=candles_data,
+            last_updated=datetime.now(timezone.utc).isoformat(),
+        )
+    except Exception as e:
+        return jsonify(detail=f"Deribit candles unavailable: {e}"), 502
 
 
 # ── Routes: auth (MongoDB users + sessions) ───────────────────────────────────

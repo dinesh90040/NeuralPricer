@@ -7,9 +7,11 @@ A full-stack option pricing app that combines Black-Scholes analytics with a Rea
 This project includes:
 - A Python backend in `backend/` using Flask and MongoDB
 - A React + Vite frontend in `frontend/`
+- An authenticated dashboard overview with system health, recent quotes, and shortcuts to pricing tools
 - Option-pricing logic based on Black-Scholes and optional PyTorch model inference
 - Mongo-backed user registration/login/session handling
 - API endpoints for pricing, Greeks, and live market snapshots
+- A live Deribit BTC/ETH dashboard with perpetual candles, option chains, model comparisons, and quote details
 
 ## Tech stack
 
@@ -109,6 +111,17 @@ Core backend routes include:
 - `POST /api/auth/logout` — logout
 - `GET /api/auth/me` — current user
 - `GET /api/history` — quote history
+- `GET /api/spot/<currency>` — BTC/ETH index price
+- `GET /api/candles/<currency>?resolution=5&hours=24` — Deribit perpetual OHLC data
+- `GET /api/live-chain/<currency>?expiry=YYYY-MM-DD` — cached full option chain and prices
+
+## Model evaluation and limitations
+
+The current fine-tuned model was evaluated on 6,754 held-out real option rows from an expiry-based split (not an out-of-time split). Its MAE was $80.38 (0.1561% of spot) and RMSE was $147.67, compared with $23.15 (0.0415% of spot) MAE and $39.52 RMSE for Black–Scholes using mark IV. On this test split, the neural model did not beat the Black–Scholes baseline.
+
+The model is an estimate, not a market-direction forecast. It is intended for BTC and ETH European-style options at least one day from expiry and volatility around 20–150%. Greeks displayed by the app are analytical Black–Scholes Greeks. NeuralPricer is an educational project, not investment advice.
+
+The model artifacts are present under `models/` locally but are git-ignored. The scaler records scikit-learn 1.6.1; the supplied artifacts do not record the training PyTorch version. The current backend environment uses scikit-learn 1.9.0 and PyTorch 2.13.0+cpu. scikit-learn reports a version-mismatch warning when loading the saved scaler; use a Python environment that can install scikit-learn 1.6.1 to match the artifact before relying on that warning-free compatibility.
 
 ## Environment notes
 

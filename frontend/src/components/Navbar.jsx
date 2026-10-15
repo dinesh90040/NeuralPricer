@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from "react";
-import { Activity, Zap, Gauge, Waves, Timer, LogOut, User } from "lucide-react";
+import { Activity, Zap, Gauge, Waves, Timer, LogOut, LayoutDashboard } from "lucide-react";
 import { checkHealth } from "../api/neuralpricer";
 import { ThemeToggle } from "./ui";
 
 const TABS = [
+  { id: "dashboard", label: "Dashboard",    icon: LayoutDashboard },
   { id: "pricer",    label: "Option Pricer", icon: Zap },
   { id: "greeks",    label: "Greeks",        icon: Activity },
   { id: "chain",     label: "Live Chain",    icon: Waves },
@@ -38,7 +39,7 @@ export function useApiHealth(pollMs = 10000) {
 
 export default function Navbar({ active, setPage, health, lastLatency, theme, onToggleTheme, user, onLogout, onHome }) {
   const online = health.status === "online";
-  const modelReady = !!health.model_ready;
+  const modelReady = !!(health.model_loaded ?? health.model_ready);
   const mongoOk = health.mongo === "ok";
 
   return (
@@ -59,13 +60,16 @@ export default function Navbar({ active, setPage, health, lastLatency, theme, on
             <button
               key={t.id}
               onClick={() => setPage(t.id)}
+              title={t.label}
+              aria-label={t.label}
+              aria-current={isActive ? "page" : undefined}
               className={`flex items-center gap-1.5 px-3 md:px-4 py-1.5 rounded text-sm font-medium transition-all duration-150 whitespace-nowrap
                 ${isActive
                   ? "bg-np-accent text-np-bg shadow-[0_0_12px_rgba(88,166,255,0.4)]"
                   : "text-np-muted hover:text-np-text hover:bg-np-border"}`}
             >
               <Icon size={14} />
-              <span className="hidden sm:inline">{t.label}</span>
+              <span className="hidden xl:inline">{t.label}</span>
             </button>
           );
         })}
@@ -75,11 +79,11 @@ export default function Navbar({ active, setPage, health, lastLatency, theme, on
         <ThemeToggle theme={theme} onToggle={onToggleTheme} className="hidden sm:flex" />
         <div
           className="hidden md:flex items-center gap-1.5 px-2 py-1 rounded border border-np-border"
-          title={modelReady ? "Neural network model loaded" : "Model not trained yet — Black-Scholes only"}
+          title={modelReady ? "Neural network model loaded" : "NN unavailable — Black–Scholes pricing only"}
         >
           <span className={`w-1.5 h-1.5 rounded-full ${modelReady ? "bg-np-green" : "bg-np-amber"}`} />
           <span className="font-mono text-[10px] uppercase tracking-wider text-np-muted">
-            {modelReady ? "NN model active" : "BS mode"}
+            {modelReady ? "NN model active" : "NN unavailable"}
           </span>
         </div>
 
