@@ -44,7 +44,14 @@ from data_collector import fetch_full_snapshot
 app = Flask(__name__)
 CORS(
     app,
-    origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    origins=[
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "http://localhost:3001",
+        "http://127.0.0.1:3001",
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+    ],
     allow_headers="*",
     supports_credentials=True,
 )

@@ -1,0 +1,138 @@
+{
+  "config": {
+    "seed": 42,
+    "n_synth": 400000,
+    "spot_lo": 0.7,
+    "spot_hi": 1.3,
+    "min_frac": 0.00015,
+    "max_spread": 1.0,
+    "batch": 4096,
+    "pre_epochs": 100,
+    "ft_epochs": 60,
+    "lr_pre": 0.002,
+    "lr_ft": 0.0002,
+    "patience": 30,
+    "replay": 1.0
+  },
+  "exported": "NN fine-tuned",
+  "raw_rows": 127322,
+  "clean_rows": 122471,
+  "snapshots": 79,
+  "cleaning": [
+    [
+      "missing values in core fields",
+      0
+    ],
+    [
+      "sigma outside 5%..300%",
+      0
+    ],
+    [
+      "T < 1 day",
+      0
+    ],
+    [
+      "one-sided quote (bid or ask = 0)",
+      4584
+    ],
+    [
+      "bid-ask spread too wide",
+      267
+    ],
+    [
+      "mid price below tick-noise floor",
+      0
+    ],
+    [
+      "mid price >= spot",
+      0
+    ]
+  ],
+  "split_rows": {
+    "train": 95090,
+    "val": 20627,
+    "test": 6754
+  },
+  "real_val": {
+    "n": {
+      "BS (mark IV)": 20627.0,
+      "NN pretrained only": 20627.0,
+      "NN fine-tuned": 20627.0
+    },
+    "MAE_usd": {
+      "BS (mark IV)": 102.18280783329415,
+      "NN pretrained only": 129.26906039117958,
+      "NN fine-tuned": 122.28723086298942
+    },
+    "RMSE_usd": {
+      "BS (mark IV)": 201.80494400816227,
+      "NN pretrained only": 252.32579851201223,
+      "NN fine-tuned": 278.5031101361555
+    },
+    "MAE_pct_spot": {
+      "BS (mark IV)": 0.13758232501622358,
+      "NN pretrained only": 0.28339095674424647,
+      "NN fine-tuned": 0.2755493029625082
+    },
+    "MedRelErr_pct": {
+      "BS (mark IV)": 0.9829026644085279,
+      "NN pretrained only": 1.5895683514444698,
+      "NN fine-tuned": 1.4883734691093085
+    },
+    "R2": {
+      "BS (mark IV)": 0.9997516357957825,
+      "NN pretrained only": 0.9996117167001605,
+      "NN fine-tuned": 0.9995269734710654
+    }
+  },
+  "real_test": {
+    "n": {
+      "BS (mark IV)": 6754.0,
+      "NN pretrained only": 6754.0,
+      "NN fine-tuned": 6754.0
+    },
+    "MAE_usd": {
+      "BS (mark IV)": 23.154755632758,
+      "NN pretrained only": 117.82183389793255,
+      "NN fine-tuned": 80.38417877850928
+    },
+    "RMSE_usd": {
+      "BS (mark IV)": 39.51568809855532,
+      "NN pretrained only": 219.34316736049817,
+      "NN fine-tuned": 147.66886158858253
+    },
+    "MAE_pct_spot": {
+      "BS (mark IV)": 0.04149116894933817,
+      "NN pretrained only": 0.2757730357521511,
+      "NN fine-tuned": 0.15612398611185221
+    },
+    "MedRelErr_pct": {
+      "BS (mark IV)": 0.9171074603255258,
+      "NN pretrained only": 5.659637985558351,
+      "NN fine-tuned": 3.3898442983627333
+    },
+    "R2": {
+      "BS (mark IV)": 0.9999146572319453,
+      "NN pretrained only": 0.9973704838156993,
+      "NN fine-tuned": 0.9988081942377464
+    }
+  },
+  "synthetic_fidelity": {
+    "NN pretrained only": {
+      "n": 20830,
+      "MAE_usd": 516.3481821555512,
+      "RMSE_usd": 1247.8711774356225,
+      "MAE_pct_spot": 1.1592127722178638,
+      "MedRelErr_pct": 1.6722895818090222,
+      "R2": 0.9995481132967331
+    },
+    "NN fine-tuned": {
+      "n": 20830,
+      "MAE_usd": 663.1770123661213,
+      "RMSE_usd": 2101.8600054721155,
+      "MAE_pct_spot": 1.4800966873602217,
+      "MedRelErr_pct": 1.5488268226239126,
+      "R2": 0.9987179716536003
+    }
+  }
+}
